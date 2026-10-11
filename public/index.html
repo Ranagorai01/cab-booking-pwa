@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cab Booking Portal</title>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; background-color: #ffffff; color: #000000; margin: 0; padding: 20px; }
+    .container { max-width: 500px; margin: 0 auto; padding: 20px; border: 2px solid #000000; }
+    h1, h2 { font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #000000; padding-bottom: 5px; }
+    label { display: block; margin-top: 15px; font-weight: bold; }
+    input, select { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #000000; border-radius: 0; font-family: inherit; }
+    button { background-color: #000000; color: #ffffff; padding: 12px 15px; margin-top: 20px; border: none; cursor: pointer; border-radius: 0; font-weight: bold; width: 100%; text-transform: uppercase; }
+    button:hover { background-color: #333333; }
+    .hidden { display: none; }
+    .error { color: #cc0000; margin-top: 15px; font-weight: bold; border: 1px solid #cc0000; padding: 10px; }
+    .success { color: #008000; margin-top: 15px; font-weight: bold; border: 1px solid #008000; padding: 10px; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Cab Booking Portal</h1>
+    <div id="messageBox" class="hidden"></div>
+
+    <!-- Login Module -->
+    <div id="loginSection">
+      <h2>System Access</h2>
+      <label for="email">Corporate Gmail Address</label>
+      <input type="email" id="email" placeholder="user@gmail.com" required>
+      <button onclick="requestOtp()">Request Verification Code</button>
+    </div>
+
+    <!-- OTP Module -->
+    <div id="otpSection" class="hidden">
+      <h2>Verify Identity</h2>
+      <label for="otp">Enter 6-Digit Code</label>
+      <input type="text" id="otp" placeholder="XXXXXX" required>
+      <button onclick="verifyOtp()">Submit Code</button>
+    </div>
+
+    <!-- Profile Module -->
+    <div id="profileSection" class="hidden">
+      <h2>Mandatory Profile Setup</h2>
+      <label for="password">Create System Password</label>
+      <input type="password" id="password" required>
+      <label for="fullName">Full Legal Name</label>
+      <input type="text" id="fullName" required>
+      <label for="location">Complete Pickup and Drop Address</label>
+      <input type="text" id="location" required>
+      <label for="contactNumber">Primary Mobile Number</label>
+      <input type="text" id="contactNumber" required>
+      <label for="emergencyContact">Emergency Contact Number</label>
+      <input type="text" id="emergencyContact" required>
+      <label for="teamName">Department or Team Name</label>
+      <input type="text" id="teamName" required>
+      <button onclick="completeProfile()">Save Profile</button>
+    </div>
+
+    <!-- Booking Module -->
+    <div id="bookingSection" class="hidden">
+      <h2>Schedule Transit</h2>
+      <p><strong>Notice:</strong> Portal closes strictly at 18:00 (6:00 PM) daily.</p>
+      
+      <label for="shift">Select Authorized Shift</label>
+      <select id="shift">
+        <option value="Shift A">Shift A (07:00 to 15:00)</option>
+        <option value="Shift B">Shift B (15:00 to 23:00)</option>
+        <option value="Shift C">Shift C (23:00 to 07:00)</option>
+      </select>
+      
+      <label for="type">Transit Type</label>
+      <select id="type">
+        <option value="Pickup">Pickup Only</option>
+        <option value="Drop">Drop Only</option>
+        <option value="Both">Pickup and Drop</option>
+      </select>
+      
+      <button onclick="submitBooking()">Confirm Transit Request</button>
+    </div>
+  </div>
+
+  <script>
+    let currentEmail = '';
+    let authToken = localStorage.getItem('token') || '';
+
+    if(authToken) {
+       showSection('bookingSection');
+    }
+
+    function showMessage(msg, isError = false) {
+      const msgBox = document.getElementById('messageBox');
+      msgBox.textContent = msg;
+      msgBox.className = isError ? 'error' : 'success';
+      msgBox.classList.remove('hidden');
+    }
+
+    function showSection(id) {
+      ['loginSection', 'otpSection', 'profileSection', 'bookingSection'].forEach(sec => {
+        document.getElementById(sec).classList.add('hidden');
+      });
+      document.getElementById(id).classList.remove('hidden');
+      document.getElementById('messageBox').classList.add('hidden');
+    }
+
+    async function requestOtp() {
+      const emailInput = document.getElementById('email').value;
+      if (!emailInput.endsWith('@gmail.com')) {
+        return showMessage('A valid @gmail.com address is strictly required.', true);
+      }
+      currentEmail = emailInput;
+      const res = await fetch('/api/auth/request-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentEmail })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showMessage('Verification code dispatched to email.');
+        showSection('otpSection');
+      } else {
+        showMessage(data.error, true);
+      }
+    }
+
+    async function verifyOtp() {
+      const otpInput = document.getElementById('otp').value;
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentEmail, otp: otpInput })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        authToken = data.token;
+        localStorage.setItem('token', authToken);
+        if (data.profileCompleted) {
+          showSection('bookingSection');
+        } else {
+          showSection('profileSection');
+        }
+      } else {
+        showMessage(data.error, true);
+      }
+    }
+
+    async function completeProfile() {
+      const payload = {
+        password: document.getElementById('password').value,
+        fullName: document.getElementById('fullName').value,
+        location: document.getElementById('location').value,
+        contactNumber: document.getElementById('contactNumber').value,
+        emergencyContact: document.getElementById('emergencyContact').value,
+        teamName: document.getElementById('teamName').value
+      };
+      
+      const res = await fetch('/api/profile/complete', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showMessage('Profile record saved successfully.');
+        showSection('bookingSection');
+      } else {
+        showMessage(data.error, true);
+      }
+    }
+
+    async function submitBooking() {
+      const payload = {
+        shift: document.getElementById('shift').value,
+        type: document.getElementById('type').value
+      };
+      const res = await fetch('/api/booking/create', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showMessage('Transit request confirmed and logged in database.');
+      } else {
+        showMessage(data.error, true);
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js');
+      });
+    }
+  </script>
+</body>
+</html>
